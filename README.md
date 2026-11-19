@@ -25,20 +25,18 @@ git clone https://github.com/franco0209/CaracterizadorDeCanal_USRPN210.git
 cd CaracterizadorDeCanal_USRPN210
 
 # 2. Dependencias del sistema (UHD + GUI)
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip python3-uhd uhd-host \
-    python3-gi gir1.2-webkit2-4.1 libcairo2-dev libgirepository1.0-dev
+apt install -y python3-uhd uhd-host python3-gi gir1.2-webkit2-4.1 \
+    libcairo2-dev libgirepository1.0-dev
 
-# 3. Descargar las imágenes de firmware del USRP
-sudo uhd_images_downloader
-
-# 4. Entorno virtual (con acceso a python3-uhd del sistema)
+# 3. Entorno virtual (con acceso a python3-uhd del sistema)
 python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
-# 5. Dependencias de Python
+# 4. Dependencias de Python
 pip install numpy pywebview
 ```
+
+> Si no tienes las imágenes de firmware del USRP, descárgalas con `uhd_images_downloader`.
 
 > Si falla `gir1.2-webkit2-4.1`, prueba con `gir1.2-webkit2-4.0`.
 
