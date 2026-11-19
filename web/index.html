@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Canal inalámbrico · SDR</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <svg viewBox="0 0 40 40" class="logo"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/>
+      <circle cx="20" cy="26" r="3.2"/><path d="M12 20a11 11 0 0 1 16 0M7.5 15a17 17 0 0 1 25 0M16 23.5a6 6 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <div><b>Radio Channel</b><small>Redes Inalámbricas · P3</small></div>
+  </div>
+  <nav>
+    <a data-page="conexion" class="active"><span>00</span>Conexión</a>
+    <a data-page="senal"><span>01</span>Señal y parámetros</a>
+    <a data-page="tx"><span>02</span>Transmisor</a>
+    <a data-page="rx"><span>03</span>Receptor y detección</a>
+    <a data-page="dist"><span>04</span>Pérdida de propagación</a>
+    <a data-page="obst"><span>05</span>Obstrucciones</a>
+    <a data-page="canal"><span>06</span>Fading y multitrayecto</a>
+    <a data-page="analisis"><span>07</span>Análisis comparativo</a>
+  </nav>
+  <div class="side-status">
+    <div class="status-row"><i id="txDot" class="dot"></i><span id="txStatus">TX inactivo</span></div>
+    <dl class="mini">
+      <dt>f<sub>c</sub></dt><dd id="sFc">—</dd>
+      <dt>f<sub>s</sub></dt><dd id="sFs">—</dd>
+      <dt>λ</dt><dd id="sLam">—</dd>
+      <dt>Δτ</dt><dd id="sRes">—</dd>
+      <dt>Fuente RX</dt><dd id="sSrc">—</dd>
+    </dl>
+  </div>
+</aside>
+
+<main>
+<div class="lockbar" id="lockbar"></div>
+
+<!-- ============================================================ 00 CONEXIÓN -->
+<section id="page-conexion" class="page active">
+  <header class="phead"><div><h1>Conexión y verificación del sistema</h1>
+    <p>Antes de medir: comprobar los dos SDR, el nivel de señal y que el receptor detecta las ráfagas del transmisor.</p></div></header>
+
+  <div class="grid gside">
+    <div class="card">
+      <h2>Equipos</h2>
+      <div class="form">
+        <label>Transmisor
+          <div class="seg" data-k="tx_hw"><button data-v="usrp">USRP en este PC</button><button data-v="ninguno">Otro equipo</button></div></label>
+        <label data-show="tx_hw=usrp">IP del USRP TX<input type="text" data-k="ip_tx"></label>
+        <label>Receptor
+          <div class="seg wrap" data-k="rx_hw"><button data-v="usrp">USRP N210</button><button data-v="sim">Simulado</button><button data-v="archivo">Archivo .npy</button></div></label>
+        <label data-show="rx_hw=usrp">IP del USRP RX<input type="text" data-k="ip_rx"></label>
+        <div class="filepick" data-show="rx_hw=archivo"><button class="btn" id="btnFile">Elegir archivo…</button><span id="fileName">ninguno</span></div>
+        <fieldset data-show="rx_hw=sim"><legend>Canal simulado</legend>
+          <div class="form f2">
+            <label>Potencia a 1 m (dBFS)<input type="number" step="1" data-k="sim_pref"></label>
+            <label>Exponente n verdadero<input type="number" step="0.1" data-k="sim_n"></label>
+            <label>Sombreado σ (dB)<input type="number" step="0.5" data-k="sim_sigma"></label>
+            <label>Piso de ruido (dBFS)<input type="number" step="1" data-k="sim_ruido"></label>
+            <label>CFO (Hz)<input type="number" step="100" data-k="sim_cfo"></label>
+            <label data-show="rx_hw=sim">Distancia de prueba (m)<input type="number" step="0.5" min="0.1" data-k="rx_dist_sim"></label>
+          </div>
+        </fieldset>
+        <div class="row"><button class="btn" id="btnVerTx">Verificar TX</button><button class="btn" id="btnVerRx">Verificar RX</button></div>
+        <button class="btn primary" id="btnVerEnlace">Prueba de enlace completa</button>
+        <p class="note">La prueba completa transmite la ráfaga, captura y mide: nivel del ADC, piso de ruido, detección, SNR, CFO y estabilidad. Con <b>“Otro equipo”</b> el TX debe estar activo en el otro PC (módulo 02).</p>
+      </div>
+    </div>
+
+    <div class="grid g1">
+      <div class="card">
+        <h2>Montaje experimental</h2>
+        <svg class="diag" viewBox="0 0 760 170" role="img" aria-label="Esquema del montaje">
+          <rect class="box" x="10" y="45" width="120" height="80" rx="12"/><text class="t2" x="70" y="80" text-anchor="middle">PC 1 · TX</text><text x="70" y="98" text-anchor="middle">USRP N210</text>
+          <path class="ant" d="M150 50v50m-14-50l14 14 14-14"/>
+          <rect class="box" x="630" y="45" width="120" height="80" rx="12"/><text class="t2" x="690" y="80" text-anchor="middle">PC 2 · RX</text><text x="690" y="98" text-anchor="middle">USRP N210</text>
+          <path class="ant" d="M610 50v50m-14-50l14 14 14-14"/>
+          <path class="wave" d="M175 75q15-22 30 0t30 0t30 0t30 0t30 0t30 0t30 0t30 0t30 0t30 0t30 0t30 0"/>
+          <path class="ray" d="M175 80q200 80 420 0"/>
+          <line x1="150" y1="140" x2="610" y2="140" stroke="#5d688f"/><text x="380" y="158" text-anchor="middle">distancia d (variable)</text>
+          <text x="380" y="40" text-anchor="middle">señal conocida · ráfagas periódicas</text>
+          <text x="400" y="118" text-anchor="middle" style="fill:#9b8cff">eco (multitrayectoria)</text>
+        </svg>
+        <p class="note">Mantener constantes <b>potencia, ganancias y frecuencia</b> durante cada serie. Eso asegura que cualquier cambio en la señal recibida se deba al canal y no al equipo.</p>
+      </div>
+      <div class="card">
+        <h2>Diagnóstico</h2>
+        <div id="verdict"></div>
+        <div class="steps" id="steps"><span class="muted">Ejecuta una verificación para ver los pasos.</span></div>
+        <div class="kpis small" id="conKpis"></div>
+      </div>
+      <div class="grid g2">
+        <div class="card span2"><h3>Captura de prueba: envolvente |x| y métrica de detección</h3><div class="plot tall"><canvas id="cConEnv"></canvas></div></div>
+        <div class="card span2"><h3>Espectro de la captura</h3><div class="plot"><canvas id="cConPsd"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 01 SEÑAL -->
+<section id="page-senal" class="page">
+  <header class="phead"><div><h1>Señal de prueba y parámetros</h1>
+    <p>Una ráfaga conocida (Zadoff-Chu) que sirve a la vez para <b>detectar</b>, <b>medir potencia</b> y <b>estimar el canal</b>.</p></div></header>
+
+  <div class="card">
+    <h2>Estructura de la ráfaga</h2>
+    <div class="frame" id="frameDiagram"></div>
+    <div class="table-wrap"><table class="tbl" id="frameTable">
+      <thead><tr><th>Bloque</th><th>Longitud</th><th>Contenido</th><th>Justificación</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="theory" style="margin-top:16px">
+    <div class="row2">
+      <div><b>Secuencia Zadoff-Chu</b> (N impar, u coprimo con N)
+        <span class="eq">x[k] = exp(−jπ·u·k·(k+1) / N)</span>
+        |x[k]| = 1 (potencia constante) · autocorrelación periódica = impulso perfecto · espectro plano.</div>
+      <div><b>Qué se obtiene con ella</b>
+        <span class="eq">M(d)=|Σ r[k]·r*[k+N]|² / (R₁·R₂)</span>
+        Detección insensible al CFO (repetición) y, al correlacionar con la ZC, la respuesta h[n] del canal.</div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h2>Parámetros globales <span class="badge">bloqueados durante la serie</span></h2>
+      <div class="form f3">
+        <label>Frecuencia f<sub>c</sub> (MHz)<input type="number" step="0.1" data-k="fc" data-scale="1e6"></label>
+        <label>Muestreo f<sub>s</sub> (MSps)<input type="number" step="0.5" data-k="fs" data-scale="1e6"></label>
+        <label>Longitud ZC N (impar)<input type="number" min="7" step="2" data-k="n_zc"></label>
+        <label>Raíz u<input type="number" min="1" data-k="raiz"></label>
+        <label>Repeticiones / ráfaga<input type="number" min="3" max="64" data-k="n_rep"></label>
+        <label>Periodo de ráfaga (ms)<input type="number" min="1" step="1" data-k="periodo_ms"></label>
+        <label>Amplitud TX (0–1)<input type="number" min="0.05" max="1" step="0.05" data-k="amp"></label>
+        <label>Ganancia TX (dB)<input type="number" step="1" data-k="gain_tx"></label>
+        <label>Ganancia RX (dB)<input type="number" step="1" data-k="gain_rx"></label>
+        <label>Offset de calibración (dB)<input type="number" step="0.5" data-k="cal_db"></label>
+        <label>Umbral de detección M<input type="number" min="0.1" max="0.95" step="0.05" data-k="umbral"></label>
+        <label>Captura (ms)<input type="number" min="30" step="10" data-k="duracion_ms"></label>
+      </div>
+      <p class="note"><b>Offset de calibración:</b> convierte dBFS a dBm si se conoce la ganancia total (opcional; no altera n ni las diferencias en dB). <b>Ambos PC deben usar exactamente los mismos valores.</b></p>
+    </div>
+    <div class="card">
+      <h2>Qué implican estos parámetros</h2>
+      <div class="kpis" id="senKpis"></div>
+      <p class="note" id="senNota"></p>
+    </div>
+    <div class="card"><h3>Fase de la ZC (desenrollada)</h3><div class="plot"><canvas id="cZcFase"></canvas></div>
+      <figcaption>Fase cuadrática → barrido en frecuencia → espectro plano y envolvente constante.</figcaption></div>
+    <div class="card"><h3>Señal I/Q · primeras copias de la ráfaga</h3><div class="plot"><canvas id="cZcIq"></canvas></div></div>
+    <div class="card"><h3>Autocorrelación periódica (dB)</h3><div class="plot"><canvas id="cZcAc"></canvas></div>
+      <figcaption>Impulso perfecto: no hay lóbulos laterales que se confundan con ecos.</figcaption></div>
+    <div class="card"><h3>Salida del filtro adaptado sobre la ráfaga (dB)</h3><div class="plot"><canvas id="cZcMf"></canvas></div>
+      <figcaption>Un pico por cada copia, separados N muestras.</figcaption></div>
+    <div class="card span2"><h3>Densidad espectral de potencia (dB)</h3><div class="plot"><canvas id="cZcPsd"></canvas></div></div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 TX -->
+<section id="page-tx" class="page">
+  <header class="phead"><div><h1>Transmisor</h1>
+    <p>Repite la ráfaga cada periodo hasta detenerlo. Las ganancias y la frecuencia no deben tocarse durante una serie.</p></div>
+    <div class="actions"><button class="btn danger" id="btnTxStop" disabled>Detener</button><button class="btn primary" id="btnTxGo">Transmitir</button></div></header>
+  <div class="grid gside">
+    <div class="card">
+      <h2>Configuración</h2>
+      <div class="form">
+        <div class="kpis small" id="txCfg"></div>
+        <label>Ganancia TX (dB)<input type="number" step="1" data-k="gain_tx"></label>
+        <label>Amplitud (0–1)<input type="number" min="0.05" max="1" step="0.05" data-k="amp"></label>
+        <p class="note">Si el transmisor está en otro PC, ajustar ahí los mismos valores. Una amplitud alta + ganancia alta puede saturar el RX a distancias cortas.</p>
+      </div>
+      <div class="txstate" id="txState"></div>
+    </div>
+    <div class="grid g2">
+      <div class="card span2"><h3>Tren de ráfagas (3 periodos)</h3><div class="plot"><canvas id="cTxTren"></canvas></div>
+        <figcaption>Ciclo de trabajo bajo: el silencio entre ráfagas es la referencia de ruido del receptor.</figcaption></div>
+      <div class="card"><h3>I/Q de la ráfaga (inicio)</h3><div class="plot tall"><canvas id="cTxIq"></canvas></div></div>
+      <div class="card"><h3>Espectro transmitido</h3><div class="plot tall"><canvas id="cTxPsd"></canvas></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 03 RX -->
+<section id="page-rx" class="page">
+  <header class="phead"><div><h1>Receptor y detección de ráfagas</h1>
+    <p>Captura I/Q, detecta cada ráfaga sin conocer el CFO y estima su potencia restando el piso de ruido.</p></div>
+    <div class="actions"><label class="toggle"><input type="checkbox" id="rxLoop"><span></span>captura continua</label><button class="btn primary" id="btnRx">Capturar</button></div></header>
+  <div class="theory">
+    <div class="row2">
+      <div><b>Potencia por ráfaga</b><span class="eq">P_señal = (1/L)·Σ|x[n]|² − P_ruido,  SNR = P_señal / P_ruido</span></div>
+      <div><b>CFO</b><span class="eq">Δf = −∠P(d) · f_s / (2π·N)</span> La fase entre copias consecutivas delata la diferencia de osciladores TX/RX.</div>
+    </div>
+  </div>
+  <div class="grid gside">
+    <div class="card">
+      <h2>Captura</h2>
+      <div class="form">
+        <label>Duración (ms)<input type="number" min="30" step="10" data-k="duracion_ms"></label>
+        <label>Umbral de detección M <output data-o="umbral"></output><input type="range" min="0.1" max="0.95" step="0.05" data-k="umbral"></label>
+        <label data-show="rx_hw=sim">Distancia simulada (m)<input type="number" step="0.5" min="0.1" data-k="rx_dist_sim"></label>
+        <label>Ganancia RX (dB)<input type="number" step="1" data-k="gain_rx"></label>
+        <p class="note">Si el pico del ADC se acerca a 1 hay saturación: baja la ganancia. Si es muy bajo, sube la ganancia RX.</p>
+      </div>
+    </div>
+    <div class="grid g1">
+      <div class="kpis" id="rxKpis"></div>
+      <div class="card"><h3>Envolvente |x| y métrica M(d) <small>las marcas son las ráfagas detectadas</small></h3><div class="plot tall"><canvas id="cRxEnv"></canvas></div></div>
+      <div class="card"><h3>Ráfagas detectadas</h3>
+        <div class="table-wrap scroll"><table class="tbl mono" id="rxTable"><thead><tr>
+          <th>#</th><th>t (ms)</th><th>M</th><th>CFO (Hz)</th><th>P total (dBFS)</th><th>P señal (dBFS)</th><th>SNR (dB)</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card">
+        <h2>Detalle de una ráfaga <small class="muted" id="rxDetSel"></small></h2>
+        <div class="form" style="max-width:240px;margin-bottom:12px"><label>Ráfaga<select id="rxSel"></select></label></div>
+        <div class="grid g2">
+          <div><h3>I/Q (µs desde el inicio)</h3><div class="plot"><canvas id="cDetIq"></canvas></div></div>
+          <div><h3>Filtro adaptado |c| (picos cada N)</h3><div class="plot"><canvas id="cDetMf"></canvas></div></div>
+          <div><h3>Fase por copia (°) tras quitar CFO</h3><div class="plot"><canvas id="cDetFase"></canvas></div>
+            <figcaption>Plana ⇒ CFO bien estimado.</figcaption></div>
+          <div><h3>Amplitud por copia</h3><div class="plot"><canvas id="cDetAmp"></canvas></div>
+            <figcaption>La primera copia puede variar por el transitorio.</figcaption></div>
+        </div>
+      </div>
+      <div class="card"><h3>Espectro de la captura</h3><div class="plot"><canvas id="cRxPsd"></canvas></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 04 DISTANCIA -->
+<section id="page-dist" class="page">
+  <header class="phead"><div><h1>Pérdida de propagación</h1>
+    <p>Potencia recibida en función de la distancia y ajuste del modelo log-distancia (punto 2.2).</p></div>
+    <div class="actions"><button class="btn ghost" id="btnDistCsv">Exportar CSV</button><button class="btn danger" id="btnDistClr">Borrar todo</button></div></header>
+  <div class="theory">
+    <div class="row2">
+      <div><b>Modelo log-distancia</b><span class="eq">P(d) = P₀ − 10·n·log₁₀(d/d₀) + X_σ</span> n=2 espacio libre · 2.7–3.5 interior · σ = sombreado (dB).</div>
+      <div><b>Ajuste</b> Regresión lineal de P frente a −10·log₁₀(d): la pendiente es <b>n</b>, la ordenada es <b>P₀</b> y los residuos estiman σ.</div>
+    </div>
+  </div>
+  <div class="grid gside">
+    <div class="card">
+      <h2>Nueva medición</h2>
+      <div class="form">
+        <label>Distancia TX–RX (m)<input type="number" step="0.5" min="0.1" data-k="dist_m"></label>
+        <label>Capturas por distancia<input type="number" min="1" max="30" data-k="n_caps"></label>
+        <button class="btn primary" id="btnDistMed">Medir</button>
+        <p class="note">Mide al menos 5 distancias repartidas en escala logarítmica (1, 2, 4, 8, 16 m…). Cada captura aporta varias ráfagas: se promedia la potencia <b>en lineal</b>.</p>
+        <div id="distAviso"></div>
+      </div>
+    </div>
+    <div class="grid g1">
+      <div class="kpis" id="distKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3>Potencia recibida vs distancia</h3><div class="plot tall"><canvas id="cDistLin"></canvas></div></div>
+        <div class="card"><h3>Escala logarítmica: P vs 10·log₁₀(d)</h3><div class="plot tall"><canvas id="cDistLog"></canvas></div>
+          <figcaption>La recta de pendiente −n confirma el modelo. Se compara con n = 2.</figcaption></div>
+        <div class="card span2"><h3>Residuos del ajuste (sombreado)</h3><div class="plot"><canvas id="cDistRes"></canvas></div></div>
+      </div>
+      <div class="card"><h3>Mediciones</h3>
+        <div class="table-wrap scroll"><table class="tbl mono" id="distTable"><thead><tr>
+          <th>#</th><th>d (m)</th><th>P (dB)</th><th>σ (dB)</th><th>ráfagas</th><th>SNR (dB)</th><th>resid. (dB)</th><th>estado</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 05 OBSTRUCCIONES -->
+<section id="page-obst" class="page">
+  <header class="phead"><div><h1>Efecto de las obstrucciones</h1>
+    <p>Misma distancia, distintas condiciones: línea de vista (LOS) frente a obstáculos (punto 2.3).</p></div>
+    <div class="actions"><button class="btn ghost" id="btnObstCsv">Exportar CSV</button><button class="btn danger" id="btnObstClr">Borrar todo</button></div></header>
+  <div class="grid gside">
+    <div class="card">
+      <h2>Nueva medición</h2>
+      <div class="form">
+        <label>Distancia fija (m)<input type="number" step="0.5" min="0.1" data-k="obst_dist"></label>
+        <label>Condición
+          <input type="text" data-k="obst_cond" placeholder="LOS, Pared, Persona…">
+          <div class="chips" id="obstChips"></div></label>
+        <label data-show="rx_hw=sim">Atenuación simulada del obstáculo (dB)<input type="number" step="1" data-k="obst_sim_db"></label>
+        <label>Capturas<input type="number" min="1" max="30" data-k="n_caps"></label>
+        <button class="btn primary" id="btnObstMed">Medir</button>
+        <p class="note">Empieza siempre por <b>LOS</b> (referencia). No muevas TX ni RX al cambiar de obstáculo: solo interpón el objeto.</p>
+        <div id="obstAviso"></div>
+      </div>
+      <svg class="diag" viewBox="0 0 320 110" style="margin-top:12px"><rect class="box" x="6" y="35" width="56" height="40" rx="8"/><text x="34" y="60" text-anchor="middle">TX</text>
+        <rect class="box" x="258" y="35" width="56" height="40" rx="8"/><text x="286" y="60" text-anchor="middle">RX</text>
+        <line class="los" x1="64" y1="55" x2="256" y2="55"/><rect class="blk" x="150" y="18" width="18" height="74" rx="3"/>
+        <text x="159" y="106" text-anchor="middle">obstáculo</text></svg>
+    </div>
+    <div class="grid g1">
+      <div class="kpis" id="obstKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3>Atenuación respecto a LOS (dB)</h3><div class="plot tall"><canvas id="cObstBar"></canvas></div>
+          <figcaption>Barras de error: error estándar combinado de la media.</figcaption></div>
+        <div class="card"><h3>Lectura física</h3><ul class="summary" id="obstTexto"><li class="muted">Mide LOS y al menos un obstáculo.</li></ul></div>
+      </div>
+      <div class="card"><h3>Resumen por condición</h3>
+        <div class="table-wrap"><table class="tbl mono" id="obstGrp"><thead><tr>
+          <th>Condición</th><th>P (dB)</th><th>σ (dB)</th><th>ráfagas</th><th>Atenuación (dB)</th><th>Clase</th><th>≙ distancia ×</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card"><h3>Mediciones</h3>
+        <div class="table-wrap scroll"><table class="tbl mono" id="obstTable"><thead><tr>
+          <th>#</th><th>Condición</th><th>d (m)</th><th>P (dB)</th><th>σ (dB)</th><th>ráfagas</th><th>SNR (dB)</th><th>estado</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 06 CANAL -->
+<section id="page-canal" class="page">
+  <header class="phead"><div><h1>Desvanecimiento y multitrayectoria</h1>
+    <p>Dos fenómenos de “pequeña escala”: la potencia cambia al mover el RX unos centímetros (2.4) y la respuesta del canal revela los ecos (2.5).</p></div>
+    <div class="actions"><div class="seg" data-k="canal_tab"><button data-v="fad">2.4 · Fading</button><button data-v="mp">2.5 · Multitrayectoria</button></div></div></header>
+
+  <!-- ---- fading -->
+  <div data-show="canal_tab=fad">
+    <div class="theory"><div class="row2">
+      <div><b>Interferencia de ondas</b><span class="eq">r = Σₖ aₖ·exp(j·2π·x·cosθₖ / λ)</span> Un desplazamiento de ~λ/2 pasa de suma constructiva a destructiva.</div>
+      <div><b>Distribuciones</b> Rayleigh (sin LOS): <span class="eq">f(r) = 2r·e^(−r²)</span> Rice (con LOS): depende del factor K = potencia directa / dispersa.</div></div></div>
+    <div class="grid gside">
+      <div class="card">
+        <h2>Barrido de posiciones</h2>
+        <div class="form">
+          <label data-show="rx_hw=sim">Escenario simulado
+            <div class="seg wrap" data-k="fad_esc"><button data-v="los">LOS</button><button data-v="nlos">NLOS corto</button><button data-v="multi">Eco largo</button></div></label>
+          <div class="form f2">
+            <label>Distancia fija (m)<input type="number" step="0.5" data-k="fad_dist"></label>
+            <label>Capturas / posición<input type="number" min="1" max="30" data-k="n_caps"></label>
+            <label>Cobertura (nº de λ)<input type="number" min="2" max="12" data-k="fad_nlam"></label>
+            <label>Pasos por λ<input type="number" min="4" max="16" data-k="fad_frac"></label>
+          </div>
+          <label>Posición actual
+            <div class="pos-nav"><button class="btn ghost" id="btnPosPrev">◀</button><output id="posOut">—</output><button class="btn ghost" id="btnPosNext">▶</button></div></label>
+          <button class="btn primary" id="btnFadMed">Medir esta posición</button>
+          <button class="btn" id="btnFadSim" data-show="rx_hw=sim">Barrido automático (simulado)</button>
+          <div class="row"><button class="btn ghost" id="btnFadCsv">CSV</button><button class="btn danger" id="btnFadClr">Borrar</button></div>
+          <p class="note">Con hardware: desplaza el RX <b id="pasoCm">—</b> entre medidas (regla o cinta), sin tocar el TX. Cubre varias λ.</p>
+        </div>
+      </div>
+      <div class="grid g1">
+        <div class="kpis" id="fadKpis"></div>
+        <div class="grid g2">
+          <div class="card span2"><h3>Potencia recibida vs posición del receptor</h3><div class="plot tall"><canvas id="cFadPos"></canvas></div>
+            <figcaption>Variaciones de decenas de dB en centímetros, con distancia casi constante: no es pérdida de propagación.</figcaption></div>
+          <div class="card"><h3>Distribución de la envolvente</h3><div class="plot tall"><canvas id="cFadHist"></canvas></div>
+            <figcaption>Histograma frente a Rayleigh y Rice con el K estimado.</figcaption></div>
+          <div class="card"><h3>Potencia relativa a la mediana (dB)</h3><div class="plot tall"><canvas id="cFadRel"></canvas></div>
+            <figcaption>Se marcan fades de −10 dB y la mediana.</figcaption></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- multitrayectoria -->
+  <div data-show="canal_tab=mp">
+    <div class="theory"><div class="row2">
+      <div><b>Estimación del canal</b><span class="eq">H[k] = Y[k] / X[k],   h = IFFT(H)</span> Con la ZC conocida (|X[k]| constante) no se amplifica ruido.</div>
+      <div><b>Dispersión de retardo</b><span class="eq">σ_τ = √( Σ (τ−τ̄)²·P(τ) / ΣP ),  B_c ≈ 1/(5σ_τ)</span></div></div></div>
+    <div class="grid gside">
+      <div class="card">
+        <h2>Estimar el canal</h2>
+        <div class="form">
+          <label>Escenario
+            <div class="seg" data-k="canal_esc"><button data-v="los">Línea de vista</button><button data-v="multi">Multitrayectoria</button></div></label>
+          <label>Distancia (m)<input type="number" step="0.5" data-k="canal_dist"></label>
+          <label>Capturas<input type="number" min="1" max="30" data-k="n_caps"></label>
+          <button class="btn primary" id="btnCanMed">Estimar canal</button>
+          <div class="row"><button class="btn ghost" id="btnCanCsv">CSV</button><button class="btn danger" id="btnCanClr">Borrar</button></div>
+          <p class="note">Repite en <b>LOS</b> (despejado) y en un lugar <b>muy reflectante</b> (metal, pasillo, esquinas). La resolución en retardo es <b>1/f<sub>s</sub></b>: para separar ecos cercanos sube f<sub>s</sub> (el N210 admite hasta 25 MS/s).</p>
+        </div>
+      </div>
+      <div class="grid g1">
+        <div class="kpis" id="canKpis"></div>
+        <div class="grid g2">
+          <div class="card span2"><h3>Perfil de potencia-retardo (dB, relativo al camino principal)</h3><div class="plot xtall"><canvas id="cCanPdp"></canvas></div>
+            <figcaption>Cada pico es una componente multitrayectoria; su posición horizontal es el retardo (1 ns ≈ 30 cm de camino extra).</figcaption></div>
+          <div class="card span2"><h3>Respuesta en frecuencia |H(f)| (dB)</h3><div class="plot tall"><canvas id="cCanH"></canvas></div>
+            <figcaption>Ecos ⇒ rizado y nulos en frecuencia: el canal deja de ser plano (selectivo).</figcaption></div>
+        </div>
+        <div class="card"><h3>Componentes detectadas</h3>
+          <div class="table-wrap"><table class="tbl mono" id="canTable"><thead><tr>
+            <th>Escenario</th><th>#</th><th>Retardo (ns)</th><th>Camino extra (m)</th><th>Potencia rel. (dB)</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 07 ANÁLISIS -->
+<section id="page-analisis" class="page">
+  <header class="phead"><div><h1>Análisis comparativo</h1>
+    <p>Qué pesa más, a qué escala ocurre y qué se compensa con potencia o requiere procesamiento de señal (punto 2.6).</p></div>
+    <div class="actions"><button class="btn primary" id="btnAna">Actualizar análisis</button></div></header>
+  <div class="grid g4" id="anaChips"></div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3>Magnitud de cada efecto (dB)</h3><div class="plot tall"><canvas id="cAnaBar"></canvas></div>
+      <figcaption>Distancia: pérdida entre extremos · obstrucción: peor caso · fading: pico-a-pico · multitrayecto: rizado en frecuencia.</figcaption></div>
+    <div class="card"><h2>Conclusiones</h2><ul class="summary" id="anaTexto"><li class="muted">Completa los módulos 04–06.</li></ul></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Atenuación o distorsión: ¿qué arregla la potencia?</h3>
+    <div class="table-wrap"><table class="tbl" id="anaTable"><thead><tr>
+      <th>Fenómeno</th><th>Escala</th><th>Magnitud</th><th>Resultado medido</th><th>Se compensa con</th><th>Cómo</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="card" style="margin-top:16px"><h3>Exportar datos para el informe</h3>
+    <div class="row" style="max-width:640px">
+      <button class="btn" data-csv="distancia">CSV distancia</button><button class="btn" data-csv="obstruccion">CSV obstrucciones</button>
+      <button class="btn" data-csv="fading">CSV fading</button><button class="btn" data-csv="canal">CSV canal</button></div>
+    <p class="note">Los CSV y las figuras (botón <b>PNG</b> que aparece al pasar el ratón sobre cada gráfica) se guardan en la carpeta <b>exportados/</b>. El IQ crudo de las ráfagas queda en <b>mediciones/iq/</b>.</p>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+<script src="plots.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
