@@ -24,15 +24,12 @@ Incluye un **canal simulado**, así que se puede probar toda la interfaz sin har
 git clone https://github.com/franco0209/CaracterizadorDeCanal_USRPN210.git
 cd CaracterizadorDeCanal_USRPN210
 
-# 2. Dependencias del sistema (UHD + GUI)
-apt install -y python3-uhd uhd-host python3-gi gir1.2-webkit2-4.1 \
-    libcairo2-dev libgirepository1.0-dev
 
-# 3. Entorno virtual (con acceso a python3-uhd del sistema)
+# 2. Entorno virtual (con acceso a python3-uhd del sistema)
 python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
-# 4. Dependencias de Python
+# 3. Dependencias de Python
 pip install numpy pywebview
 ```
 
@@ -56,8 +53,6 @@ uhd_find_devices
 source venv/bin/activate
 python3 app.py
 
-# con el inspector web (depuración)
-DEBUG=1 python3 app.py
 ```
 
 Sin USRP conectados, usa la fuente **simulada** desde la interfaz.
