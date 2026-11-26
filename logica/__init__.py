@@ -12,4 +12,5 @@ Orden sugerido de estudio (cada archivo depende solo de los anteriores):
     9. analisis.py          comparación de efectos y qué se compensa con ganancia
    10. enlace.py            verificación de conexión (diagnóstico del módulo 00)
    11. simulador.py         canal simulado para ensayar sin hardware
+  12. guia.py              modo guiado: resultado esperado y validación de cada paso
 """

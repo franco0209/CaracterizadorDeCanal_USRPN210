@@ -13,7 +13,8 @@
     <div><b>Radio Channel</b><small>Redes Inalámbricas · P3</small></div>
   </div>
   <nav>
-    <a data-page="conexion" class="active"><span>00</span>Conexión</a>
+    <a data-page="guia" class="active"><span>▶</span>Laboratorio guiado</a>
+    <a data-page="conexion"><span>00</span>Conexión</a>
     <a data-page="senal"><span>01</span>Señal y parámetros</a>
     <a data-page="tx"><span>02</span>Transmisor</a>
     <a data-page="rx"><span>03</span>Receptor y detección</a>
@@ -37,8 +38,22 @@
 <main>
 <div class="lockbar" id="lockbar"></div>
 
+<!-- ============================================================ GUIADO -->
+<section id="page-guia" class="page active">
+  <header class="phead"><div><h1>Laboratorio guiado</h1>
+    <p>Haz el paso físico, pulsa <b>Listo</b> y el software mide y comprueba que el resultado tenga sentido.</p></div>
+    <div class="actions"><button class="btn danger" id="btnGuiaNueva">Nueva práctica</button></div></header>
+  <div class="grid gside">
+    <div class="card"><h2>Pasos</h2><ol class="g-lista" id="gLista"></ol></div>
+    <div class="grid g1">
+      <div class="card g-paso" id="gPaso"></div>
+      <div id="gResultado"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================ 00 CONEXIÓN -->
-<section id="page-conexion" class="page active">
+<section id="page-conexion" class="page">
   <header class="phead"><div><h1>Conexión y verificación del sistema</h1>
     <p>Antes de medir: comprobar los dos SDR, el nivel de señal y que el receptor detecta las ráfagas del transmisor.</p></div></header>
 
@@ -406,8 +421,20 @@
   </div>
 </section>
 </main>
+<div class="g-modal" id="gModal" hidden>
+  <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="gmTitulo">
+    <h2 id="gmTitulo"></h2>
+    <p class="g-pregunta" id="gmPregunta"></p>
+    <dl class="g-cmp"><dt>Esperado</dt><dd id="gmEsperado"></dd><dt>Medido</dt><dd id="gmMedido"></dd></dl>
+    <div class="row">
+      <button class="btn primary" id="gmRepetir">Corregir y repetir</button>
+      <button class="btn" id="gmSeguro">Sí, estoy seguro: guardar</button>
+    </div>
+  </div>
+</div>
 <div id="toast"></div>
 <script src="plots.js"></script>
+<script src="guia.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

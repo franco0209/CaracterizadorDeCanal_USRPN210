@@ -108,6 +108,7 @@ async function cargarPagina(page, soloSenal = false) {
     if (page === 'senal' || page === 'tx') await actualizarSenal();
     if (page === 'tx') txEstado();
     if (soloSenal) return;
+    if (page === 'guia') Guia.pintar();
     if (page === 'dist') pintarDist(await api.dist_listar(P));
     if (page === 'obst') pintarObst(await api.obst_listar(P));
     if (page === 'canal') {
@@ -514,7 +515,7 @@ async function init() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('p3_params') || '{}'); } catch (e) { }
   P = { ...def, ...saved };
-  conectar(); bindControles(); pintarControles(); pngButtons();
-  irA('conexion');
+  conectar(); bindControles(); pintarControles(); pngButtons(); Guia.iniciar();
+  irA('guia');
 }
 window.addEventListener('pywebviewready', init);

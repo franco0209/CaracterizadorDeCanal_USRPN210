@@ -8,8 +8,11 @@ comunicaciones: para estudiarlos, leer logica/ (ver logica/__init__.py).
 """
 import base64
 import csv
+import ipaddress
 import json
 import os
+import shutil
+import subprocess
 import time
 import traceback
 
@@ -21,6 +24,7 @@ from logica import analisis as an
 from logica import canal as ca
 from logica import desvanecimiento as fd
 from logica import enlace as en
+from logica import guia as gu
 from logica import obstrucciones as ob
 from logica import parametros as pa
 from logica import potencia as po
@@ -209,7 +213,7 @@ class Api:
                'cfo_hz': float(np.mean(cfos)), 'ruido_dbfs': float(np.mean(ruidos)),
                'pico': float(max(picos)), 'sat_pct': float(max(sats)), 'overflow': ov,
                'valido': bool(np.mean(snrs) >= SNR_MIN_VALIDO and max(sats) < 0.1),
-               'firma': _firma(p), 'sombra_sim': ctx.get('sombra')}
+               'firma': _firma(p), 'sombra_sim': ctx.get('sombra'), 'hw': p['rx_hw']}
         if con_canal:
             out['_pdp'] = pdp_sum / n_pdp
             out['_raw'] = raw_sum / n_pdp
@@ -341,7 +345,11 @@ class Api:
     def dist_medir(self, p):
         try:
             d = float(p['dist_m'])
-            pt = self._medir_punto(p, {'d': d}, p['n_caps'], 'd')
+            ctx = {'d': d}
+            if p.get('sim_olvido') and self._db['distancia']:          # simula no haber movido el RX
+                ant = self._db['distancia'][-1]
+                ctx = {'d': ant['d'], 'sombra': ant.get('sombra_sim') or 0.0}
+            pt = self._medir_punto(p, ctx, p['n_caps'], 'd')
             pt['d'] = d
             self._db['distancia'].append(pt)
             self._guardar()
@@ -377,7 +385,7 @@ class Api:
             cond = (p['obst_cond'] or 'LOS').strip()
             d = float(p['obst_dist'])
             ctx = {'d': d, 'sombra': float(self._rng.normal(0, 0.7)),
-                   'obst': 0.0 if cond.upper() == 'LOS' else float(p['obst_sim_db'])}
+                   'obst': 0.0 if cond.upper() == 'LOS' or p.get('sim_olvido') else float(p['obst_sim_db'])}
             pt = self._medir_punto(p, ctx, p['n_caps'], 'o')
             pt['cond'] = 'LOS' if cond.upper() == 'LOS' else cond
             pt['d'] = d
@@ -406,7 +414,8 @@ class Api:
             pl = fd.plan_barrido(float(p['fc']), float(p['fad_nlam']), float(p['fad_frac']))
             idx = int(p['fad_idx'] if idx is None else idx)
             pos = idx * pl['paso_m']
-            ctx = {'d': float(p['fad_dist']), 'pos': pos, 'esc': p['fad_esc'], 'sombra': 0.0}
+            ctx = {'d': float(p['fad_dist']), 'pos': 0.0 if p.get('sim_olvido') else pos,
+                   'esc': p['fad_esc'], 'sombra': 0.0}
             pt = self._medir_punto(p, ctx, p['n_caps'], 'f')
             pt['idx'], pt['pos_m'] = idx, pos
             self._db['fading'] = [r for r in self._db['fading'] if r['idx'] != idx] + [pt]
@@ -445,7 +454,7 @@ class Api:
         try:
             cfg = _cfg(p)
             esc = p['canal_esc']
-            ctx = {'d': float(p['canal_dist']), 'esc': esc, 'sombra': 0.0}
+            ctx = {'d': float(p['canal_dist']), 'esc': 'los' if p.get('sim_olvido') else esc, 'sombra': 0.0}
             pt = self._medir_punto(p, ctx, p['n_caps'], 'c', con_canal=True)
             pdp, raw, h = pt.pop('_pdp'), pt.pop('_raw'), pt.pop('_h')
             fs_i = cfg.fs * INTERP
@@ -490,6 +499,162 @@ class Api:
                           'fading': len(self._db['fading']), 'canal': len(self._db['canal'])}}
         except Exception as e:
             return {'ok': False, 'error': str(e), 'tb': traceback.format_exc()}
+
+    # ================================================================ modo guiado
+    def guia_red(self, ip):
+        """¿Este PC tiene una interfaz en la red del USRP y el equipo responde (ping + UHD)?"""
+        try:
+            red = ipaddress.ip_network(f'{ip.strip()}/24', strict=False)
+            ifs = json.loads(subprocess.run(['ip', '-j', 'addr'], capture_output=True, text=True,
+                                            timeout=5).stdout or '[]')
+            propia = next((i['ifname'] for i in ifs for a in i.get('addr_info', [])
+                           if a.get('family') == 'inet' and ipaddress.ip_address(a['local']) in red), None)
+            pasos, comando = [], None
+            if propia:
+                pasos.append({'paso': 'IP de este PC', 'estado': 'ok', 'detalle': f'{propia} está en {red}'})
+            else:
+                eth = next((i['ifname'] for i in ifs if i['ifname'].startswith(('en', 'eth'))), '<interfaz>')
+                libre = red.network_address + (1 if not ip.strip().endswith('.1') else 10)
+                comando = f'sudo ip addr add {libre}/24 dev {eth} && sudo ip link set {eth} up'
+                pasos.append({'paso': 'IP de este PC', 'estado': 'warn',
+                              'detalle': f'ninguna interfaz está en {red}: ejecuta el comando de abajo'})
+            sonda = radio.sonda_dispositivo(ip.strip(), abrir=False)
+            pasos += en.evaluar_dispositivo('USRP', sonda)
+            return {'ok': True, 'pasos': pasos, 'comando': comando, 'listo': bool(sonda['ping'] and sonda['uhd'])}
+        except Exception as e:
+            return {'ok': False, 'error': str(e)}
+
+    def _asegurar_tx(self, p):
+        """Con el TX en este PC, lo (re)inicia si no está transmitiendo."""
+        if p['tx_hw'] != 'usrp':
+            return
+        if not self._tx.estado['activo']:
+            r = self.tx_iniciar(p)
+            if not r['ok']:
+                raise RuntimeError(r['error'])
+            time.sleep(1.5)
+        if self._tx.estado['error'] or not self._tx.estado['activo']:
+            raise RuntimeError(f"El transmisor no arrancó: {self._tx.estado['error'] or 'se detuvo'}")
+
+    def guia_tx(self, p):
+        try:
+            self._asegurar_tx(p)
+            return {'ok': True, 'estado': dict(self._tx.estado)}
+        except Exception as e:
+            return {'ok': False, 'error': str(e)}
+
+    def guia_enlace(self, p):
+        try:
+            cfg = _cfg(p)
+            self._asegurar_tx(p)
+            x, info = self._adquirir(p, {'d': float(p['rx_dist_sim']), 'sombra': 0})
+            m = po.medir_captura(x, cfg, float(p['umbral']))
+            pasos = en.diagnosticar_captura(m, cfg)
+            return {'ok': True, 'pasos': pasos, 'listo': en.veredicto(pasos) != 'ko'}
+        except Exception as e:
+            return {'ok': False, 'error': str(e), 'tb': traceback.format_exc()}
+
+    def _refs(self, p, filas):
+        """Medidas comparables: válidas, misma serie y sin dudas pendientes."""
+        return [r for r in filas if r.get('valido') and r.get('firma') == _firma(p) and r.get('hw') == p['rx_hw']
+                and (not r.get('dudoso') or r.get('confirmado_por_usuario'))]
+
+    def guia_esperado(self, p, fase):
+        """Texto de lo que debería pasar, para mostrarlo antes de medir."""
+        try:
+            if fase == 'distancia':
+                d = float(p['dist_m'])
+                pr = gu.prediccion_distancia(self._refs(p, self._db['distancia']), d)
+                return (f"Esperado a {d:g} m: {pr['p']:.1f} ± {pr['tol']:.0f} dB" if pr
+                        else 'Primera medida: servirá de referencia para las siguientes.')
+            if fase == 'obstruccion':
+                cond = p['obst_cond']
+                los = [r for r in self._refs(p, self._db['obstruccion'])
+                       if r['cond'] == 'LOS' and r['d'] == float(p['obst_dist'])]
+                if cond == 'LOS':
+                    return 'Referencia sin obstáculo: contra ella se comparan los demás.'
+                t0, t1 = gu.MATERIALES.get(cond, gu.OTRO_MATERIAL)[:2]
+                if not los:
+                    return 'Falta la referencia LOS a esta distancia: mídela primero.'
+                base = float(np.mean([r['p_db'] for r in los]))
+                return f'Esperado con {cond.lower()}: entre {base - t1:.1f} y {base - t0:.1f} dB ({t0}–{t1} dB menos que LOS).'
+            if fase == 'fading':
+                return 'Esperado: la potencia sube y baja suavemente de una posición a la siguiente.'
+            if p['canal_esc'] == 'los':
+                return 'Esperado: un pico dominante y |H(f)| casi plano.'
+            return 'Esperado: más ecos (mayor dispersión de retardo o rizado) que en línea de vista.'
+        except Exception as e:
+            return f'No se pudo estimar: {e}'
+
+    def guia_medir(self, p, fase):
+        """Mide con el módulo normal y valida el resultado contra lo esperado."""
+        try:
+            self._asegurar_tx(p)
+            medir = {'distancia': self.dist_medir, 'obstruccion': self.obst_medir,
+                     'fading': self.fad_medir, 'canal': self.canal_medir}[fase]
+            r = medir(p)
+            if not r['ok']:
+                if fase == 'obstruccion' and p['obst_cond'] != 'LOS' and 'ráfaga' in r['error']:
+                    r['error'] += (' Si el TX sigue activo, el obstáculo bloquea toda la señal: acorta la distancia '
+                                   'de esta fase, vuelve a medir LOS y repite.')
+                return r
+            if fase == 'canal':
+                ident = p['canal_esc']
+                pt = self._db['canal'][ident]
+                los = self._db['canal'].get('los')
+                if los and (los.get('hw') != p['rx_hw'] or los.get('firma') != _firma(p)
+                            or (los.get('dudoso') and not los.get('confirmado_por_usuario'))):
+                    los = None
+                v = gu.validar_canal(pt, los, ident)
+            elif fase == 'fading':
+                pt = next(x for x in self._db['fading'] if x['idx'] == int(p['fad_idx']))
+                ident = pt['id']
+                paso = fd.plan_barrido(float(p['fc']), float(p['fad_nlam']), float(p['fad_frac']))['paso_m']
+                v = gu.validar_fading(pt, self._refs(p, self._db['fading']), paso * 100)
+            else:
+                pt = self._db[fase][-1]
+                ident = pt['id']
+                refs = [x for x in self._refs(p, self._db[fase]) if x['id'] != ident]
+                if fase == 'distancia':
+                    v = gu.validar_distancia(pt, refs, pt['d'])
+                else:
+                    refs = [x for x in refs if x['cond'] == 'LOS' and x['d'] == pt['d']]
+                    v = gu.validar_obstruccion(pt, refs, pt['cond'])
+            if v['estado'] == 'invalido':
+                self.borrar(fase, ident)
+                ident = None
+            elif v['estado'] == 'sospechoso':
+                pt['dudoso'] = v['pregunta']
+                self._guardar()
+            return {'ok': True, 'id': ident, **v}
+        except Exception as e:
+            return {'ok': False, 'error': str(e), 'tb': traceback.format_exc()}
+
+    def guia_confirmar(self, fase, ident):
+        """El usuario asegura que el montaje era correcto: la medida dudosa se conserva marcada."""
+        pt = (self._db['canal'].get(ident) if fase == 'canal'
+              else next((r for r in self._db[fase] if r.get('id') == ident), None))
+        if pt is None:
+            return False
+        pt['confirmado_por_usuario'] = True
+        self._guardar()
+        return True
+
+    def guia_resumen(self):
+        return {k: len(v) for k, v in self._db.items()}
+
+    def guia_nueva_practica(self):
+        """Archiva los resultados actuales y empieza con la base vacía."""
+        try:
+            copia = None
+            if os.path.isfile(RESULTADOS):
+                copia = os.path.join(MED, f"resultados_{time.strftime('%Y%m%d_%H%M%S')}.json")
+                shutil.copy2(RESULTADOS, copia)
+            self._db = {'distancia': [], 'obstruccion': [], 'fading': [], 'canal': {}}
+            self._guardar()
+            return {'ok': True, 'copia': copia}
+        except Exception as e:
+            return {'ok': False, 'error': str(e)}
 
     # ================================================================ borrar / exportar
     def borrar(self, clave, ident):
@@ -545,4 +710,4 @@ if __name__ == '__main__':
                                 js_api=api, width=1480, height=920, min_size=(1100, 700),
                                 background_color='#0a0f1d')
     win.events.closed += api.cerrar
-    webview.start(debug=os.environ.get('DEBUG') == '1')
+    webview.start(debug=os.environ.get('DEBUG') == '1', private_mode=False)    # recuerda parámetros y avance guiado
