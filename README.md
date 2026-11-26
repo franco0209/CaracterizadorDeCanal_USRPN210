@@ -11,7 +11,7 @@ Incluye un **canal simulado**, así que se puede probar toda la interfaz sin har
 
 ## Laboratorio guiado
 
-La app abre en **Laboratorio guiado**: se elige el montaje (ensayo simulado, un PC con los dos USRP, o máquina 1 TX / máquina 2 RX) y se avanza paso a paso. En cada uno se hace la acción física, se pulsa **Listo** y el software verifica (ping/UHD, enlace o medida). Si el resultado se aleja de lo esperado (por ejemplo, un obstáculo que no atenúa), pregunta antes de aceptarlo: **repetir** o **confirmar** (queda marcado como `confirmado_por_usuario`). Los rangos esperados están en `logica/guia.py`.
+La app abre en **Laboratorio guiado**: se elige el montaje (ensayo simulado, un PC con los dos USRP, o máquina 1 TX / máquina 2 RX) y se avanza paso a paso. En cada uno se hace la acción física, se pulsa **Listo** y el software verifica (ping/UHD, enlace o medida). Si el resultado se aleja de lo esperado (por ejemplo, un obstáculo que no atenúa), pregunta antes de aceptarlo: **repetir** o **confirmar** (queda marcado como `confirmado_por_usuario`). Entre fases hay paradas de revisión con gráficas, valores y el punto del enunciado que cubren (2.1 a 2.6). Los rangos esperados están en `logica/guia.py`.
 
 ## Estructura
 

@@ -278,6 +278,8 @@ select { cursor: pointer; }
 .g-paso .form { max-width: 460px; margin-bottom: 14px; }
 .g-paso .diag { max-width: 620px; margin: 4px 0 14px; }
 .g-esperado { border: 1px dashed var(--line2); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; color: var(--cyan); font: 13px var(--mono); }
+#gRevision:empty { display: none; }
+.theory ul { margin: 6px 0 0; padding-left: 18px; }
 .g-botones { display: flex; gap: 10px; flex-wrap: wrap; }
 .g-botones .primary { font-size: 15px; padding: 11px 28px; }
 .g-cmd { display: block; user-select: all; background: #0a0f1d; border: 1px dashed var(--amber); border-radius: 9px; padding: 10px 12px; margin: 10px 0; font: 12.5px var(--mono); color: var(--amber); overflow-x: auto; }

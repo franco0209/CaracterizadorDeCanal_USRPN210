@@ -446,8 +446,8 @@ async function analisis() {
 }
 
 // ------------------------------------------------------------------ exportar PNG de figuras
-function pngButtons() {
-  $$('.plot canvas').forEach(cv => {
+function pngButtons(raiz = document) {
+  raiz.querySelectorAll('.plot canvas').forEach(cv => {
     const plot = cv.parentElement;
     const b = document.createElement('button');
     b.className = 'pngbtn'; b.textContent = 'PNG'; b.title = 'guardar figura en exportados/';

@@ -2,11 +2,12 @@
 const Guia = (() => {
   const CLAVE = 'p3_guia';
   const NUEVO = () => ({ rol: null, i: 0, est: {}, pend: null, fadIdx: 0, olvido: false,
-    dists: '1, 2, 4, 8', obsDist: 4, obst: ['Madera', 'Persona', 'Metal'], nlam: 3, canDist: 3 });
+    dists: '1, 2, 4, 8, 16', fadDist: 3, obsDist: 4, obst: ['Madera', 'Persona', 'Metal'], nlam: 3, canDist: 3 });
   const MATERIALES = ['Madera', 'Puerta', 'Vidrio', 'Persona', 'Pared', 'Metal'];
   const SIM_DB = { Madera: 4, Puerta: 4, Vidrio: 2, Persona: 6, Pared: 9, Metal: 14 };
   const ROLES = { sim: 'Ensayo simulado', solo: 'Un PC con los 2 USRP', pc1: 'Soy la máquina 1 (TX)', pc2: 'Soy la máquina 2 (RX)' };
-  let G = NUEVO(), ocupado = false, ultimo = null, turno = 0;
+  let G = NUEVO(), ocupado = false, ultimo = null, turno = 0, captura = null;
+  const rev = (k, ver, punto, t) => ({ k: 'r:' + k, tipo: 'rev', ver, punto, csv: { dist: 'distancia', obst: 'obstruccion', fad: 'fading', canal: 'canal' }[ver], fase: 'Revisión ' + punto, t });
 
   const salvar = () => { try { localStorage.setItem(CLAVE, JSON.stringify(G)); } catch (e) { } };
   const listaDist = () => [...new Set(String(G.dists).split(/[,; ]+/).map(Number).filter(d => d > 0))];
@@ -16,6 +17,7 @@ const Guia = (() => {
     const L = [{ k: 'rol', tipo: 'rol', fase: 'Preparación', t: '¿Cómo está armado el laboratorio?' }];
     const r = G.rol;
     if (!r) return L;
+    L.push(rev('senal', 'senal', '2.1 a', 'Conoce la señal de prueba'));
     if (r === 'solo' || r === 'pc1') {
       L.push({ k: 'redtx', tipo: 'red', ip: 'ip_tx', fase: 'Conexión', t: 'Conecta el USRP 1 (TX) a ' + (r === 'solo' ? 'este PC' : 'la máquina 1') });
       L.push({ k: 'txon', tipo: 'tx', fase: 'Conexión', t: 'Pon la antena y enciende la transmisión' });
@@ -24,13 +26,18 @@ const Guia = (() => {
     if (r === 'solo' || r === 'pc2')
       L.push({ k: 'redrx', tipo: 'red', ip: 'ip_rx', fase: 'Conexión', t: 'Conecta el USRP 2 (RX) a ' + (r === 'solo' ? 'este PC' : 'la máquina 2') });
     L.push({ k: 'enlace', tipo: 'enlace', fase: 'Conexión', t: 'Comprueba el enlace a ' + P.rx_dist_sim + ' m' });
+    L.push(rev('rx', 'rx', '2.1 b-d', 'Captura, detección y potencia'));
     listaDist().forEach(d => L.push({ k: 'd:' + d, tipo: 'medir', db: 'distancia', d, fase: 'Distancia', t: `Coloca el RX a ${d} m del TX` }));
+    L.push(rev('dist', 'dist', '2.2 c-e', 'Gráfica y modelo de propagación'));
     L.push({ k: 'o:LOS', tipo: 'medir', db: 'obstruccion', cond: 'LOS', fase: 'Obstáculos', t: `RX a ${G.obsDist} m, sin nada en medio` });
     G.obst.forEach(c => L.push({ k: 'o:' + c, tipo: 'medir', db: 'obstruccion', cond: c, fase: 'Obstáculos', t: `Pon el obstáculo de ${c.toLowerCase()}` }));
+    L.push(rev('obst', 'obst', '2.3 c-d', 'Comparación de obstáculos'));
     L.push({ k: 'fad', tipo: 'medir', db: 'fading', fase: 'Fading', t: 'Desplaza el RX en pasos pequeños' });
+    L.push(rev('fad', 'fad', '2.4 d-e', 'Análisis del desvanecimiento'));
     L.push({ k: 'c:los', tipo: 'medir', db: 'canal', esc: 'los', fase: 'Multitrayectoria', t: 'Canal con línea de vista despejada' });
     L.push({ k: 'c:multi', tipo: 'medir', db: 'canal', esc: 'multi', fase: 'Multitrayectoria', t: 'Canal en un lugar reflectante' });
-    L.push({ k: 'fin', tipo: 'fin', fase: 'Final', t: 'Resumen del laboratorio' });
+    L.push(rev('canal', 'canal', '2.5 b-d', 'Comparación del canal'));
+    L.push({ k: 'fin', tipo: 'fin', punto: '2.6', fase: 'Análisis 2.6', t: 'Análisis final y resumen' });
     return L;
   }
   const actual = () => { const L = pasos(); G.i = Math.max(0, Math.min(G.i, L.length - 1)); return L[G.i]; };
@@ -40,7 +47,7 @@ const Guia = (() => {
     const q = { ...P, sim_sigma: Math.min(P.sim_sigma, 1), sim_olvido: P.rx_hw === 'sim' && G.olvido };
     if (s.db === 'distancia') q.dist_m = s.d;
     if (s.db === 'obstruccion') Object.assign(q, { obst_dist: +G.obsDist, obst_cond: s.cond, obst_sim_db: SIM_DB[s.cond] || 8 });
-    if (s.db === 'fading') Object.assign(q, { fad_idx: G.fadIdx, fad_nlam: +G.nlam, fad_frac: 8 });
+    if (s.db === 'fading') Object.assign(q, { fad_idx: G.fadIdx, fad_nlam: +G.nlam, fad_frac: 8, fad_dist: +G.fadDist });
     if (s.db === 'canal') Object.assign(q, { canal_esc: s.esc, canal_dist: +G.canDist });
     return q;
   }
@@ -91,18 +98,19 @@ const Guia = (() => {
         G.fadIdx === 0 ? 'Marca el punto de partida del RX y ten una regla a mano.' : `Avanza el RX <b>${paso.toFixed(1)} cm</b> en línea recta.`,
         `Posición <b>${G.fadIdx + 1} de ${n}</b> → a <b>${(G.fadIdx * paso).toFixed(1)} cm</b> de la marca. No toques el TX.`]) +
         `<div class="progress" style="margin-bottom:14px"><div style="width:${100 * Math.min(G.fadIdx, n) / n}%"></div></div>` +
-        (G.fadIdx === 0 ? `<div class="form">${campo('nlam', 'Longitudes de onda a recorrer', G.nlam, 'number')}</div>` : '');
+        (G.fadIdx === 0 ? `<div class="form">${campo('fadDist', 'Distancia TX–RX en la marca inicial (m)', G.fadDist, 'number')}${campo('nlam', 'Longitudes de onda a recorrer', G.nlam, 'number')}</div>` : '');
     }
     if (s.db === 'canal') return li(s.esc === 'los' ? ['Antenas a la vista, lejos de paredes y objetos metálicos.']
       : ['Lleva el enlace a un pasillo, esquina o junto a superficies metálicas.', 'Mantén aproximadamente la misma distancia.']) +
       dibujo(G.canDist + ' m', null, s.esc === 'multi') + `<div class="form">${campo('canDist', 'Distancia (m)', G.canDist, 'number')}</div>`;
+    if (s.tipo === 'rev') return s.ver === 'rx' ? li([G.rol === 'sim' ? 'Se capturan muestras I/Q del canal simulado.' : 'Con el transmisor encendido, deja el RX quieto.']) : '';
     if (s.tipo === 'fin') {
       const L = pasos().filter(x => !['rol', 'fin'].includes(x.tipo)), e = x => G.est[x.k] || {};
       const falta = L.filter(x => e(x).s !== 'hecho'), conf = L.filter(x => e(x).confirmado);
       return li([`Pasos completados: <b>${L.length - falta.length} de ${L.length}</b>.`,
         falta.length ? 'Pendientes o saltados: ' + falta.map(x => esc(x.t)).join(' · ') : 'No queda ningún paso pendiente.',
         conf.length ? 'Aceptados pese a la alerta (revísalos en el informe): ' + conf.map(x => esc(x.t)).join(' · ') : 'Ninguna medida se aceptó contra la alerta.']) +
-        '<div class="g-botones"><button class="btn primary" data-acc="analisis">Ver análisis comparativo</button></div>';
+        '<div class="g-botones"><button class="btn ghost" data-acc="analisis">Abrir el módulo 07</button></div>';
     }
     return '';
   }
@@ -127,17 +135,49 @@ const Guia = (() => {
       <div class="g-botones" style="margin-top:6px">
         ${G.i ? '<button class="btn ghost" data-acc="atras">← Atrás</button>' : ''}
         ${mide && !fadFin ? `<button class="btn ${hecho ? '' : 'primary'}" data-acc="listo">${hecho ? 'Volver a hacer' : listo}</button>` : ''}
+        ${s.ver === 'rx' ? `<button class="btn ${captura ? '' : 'primary'}" data-acc="capturar">${captura ? 'Capturar de nuevo' : 'Listo, capturar'}</button>` : ''}
+        ${s.tipo === 'rev' ? '<button class="btn primary" data-acc="revisado" id="gRevisado" hidden>Revisado, siguiente →</button>' : ''}
+        ${s.csv ? '<button class="btn ghost" data-acc="csv">Exportar CSV</button>' : ''}
+        ${s.tipo === 'rev' && !hecho ? '<button class="btn ghost" data-acc="saltar">Saltar paso</button>' : ''}
         ${s.db === 'fading' && (G.fadIdx > 0) ? '<button class="btn ghost" data-acc="refad">Reiniciar barrido</button>' : ''}
-        ${(hecho || fadFin || (s.tipo === 'rol' && G.rol)) ? '<button class="btn primary" data-acc="sig">Siguiente paso →</button>' : ''}
+        ${((hecho && s.tipo !== 'rev') || fadFin || (s.tipo === 'rol' && G.rol)) ? '<button class="btn primary" data-acc="sig">Siguiente paso →</button>' : ''}
         ${mide && !hecho && !fadFin ? '<button class="btn ghost" data-acc="saltar">Saltar paso</button>' : ''}
       </div>`;
     pintarResultado(s);
+    pintarRevision(s, mi);
     if (s.tipo === 'medir' && !fadFin) api.guia_esperado(params(s), s.db).then(t => { if (mi === turno && $('#gEsperado')) $('#gEsperado').textContent = t; });
     if (s.tipo === 'rol') api.guia_resumen().then(n => {
       const tot = Object.values(n).reduce((a, b) => a + b, 0);
       if (mi === turno && tot && $('#gPrevio')) $('#gPrevio').innerHTML = `<p class="note wa">Hay ${tot} medidas guardadas. Para una práctica limpia pulsa <b>Nueva práctica</b> (se guarda una copia).</p>`;
     });
     if (G.pend) abrirModal();
+  }
+
+  async function pintarRevision(s, mi) {
+    const el = $('#gRevision'), vigente = () => mi === turno;
+    el.innerHTML = '';
+    if (s.tipo !== 'rev' && s.tipo !== 'fin') return;
+    let completo = false;
+    try {
+      if (s.ver === 'rx') completo = captura ? Revision.rx(el, captura) : false;
+      else completo = await Revision[s.ver || 'final'](el, vigente, +G.fadDist);
+    } catch (e) { console.error(e); toast('No se pudo dibujar la revisión: ' + e, true); }
+    if (!vigente()) return;
+    pngButtons(el);
+    if (completo && $('#gRevisado')) $('#gRevisado').hidden = false;
+  }
+
+  async function capturar(btn) {
+    const s = actual();
+    ocupado = true; ultimo = null; captura = null;
+    try {
+      await busy(btn, async () => {
+        const t = await api.guia_tx(P);
+        const r = t.ok ? await api.rx_capturar(P) : t;
+        if (r.ok) captura = r; else mostrar(s, 'ko', 'No se pudo capturar', r.error);
+      });
+    } catch (e) { console.error(e); mostrar(s, 'ko', 'Error inesperado', String(e)); }
+    finally { ocupado = false; pintar(); }
   }
 
   function pintarResultado(s) {
@@ -236,12 +276,26 @@ const Guia = (() => {
   const ir = i => { G.i = i; ultimo = null; salvar(); pintar(); };
 
   function elegirRol(r) {
-    if (G.rol !== r) { G.est = {}; G.fadIdx = 0; }
+    if (G.rol !== r) { G.est = {}; G.fadIdx = 0; captura = null; }
     G.rol = r;
     P.tx_hw = r === 'solo' || r === 'pc1' ? 'usrp' : 'ninguno';
     P.rx_hw = r === 'sim' ? 'sim' : 'usrp';
     if (r === 'pc2' && P.ip_rx === '192.168.10.3') P.ip_rx = '192.168.10.2';
     guardar(); pintarControles(); ultimo = null; salvar(); pintar();
+  }
+
+  // otra distancia invalida la fase: LOS y obstáculos solo son comparables entre sí a la misma distancia
+  async function cambiarDistObst(d) {
+    G.obsDist = d;
+    const claves = Object.keys(G.est).filter(k => k.startsWith('o:') || k === 'r:obst');
+    const ids = claves.map(k => G.est[k].id).filter(Boolean);
+    claves.forEach(k => delete G.est[k]);
+    ultimo = null;
+    if (!ids.length) return;
+    ocupado = true;
+    try { for (const id of ids) await api.borrar('obstruccion', id); }
+    finally { ocupado = false; salvar(); pintar(); }
+    toast(`Cambiaste la distancia: repite LOS y cada obstáculo a ${d} m`);
   }
 
   function iniciar() {
@@ -257,6 +311,9 @@ const Guia = (() => {
       if (b.dataset.ir) return ir(+b.dataset.ir);
       const a = b.dataset.acc, s = actual();
       if (a === 'listo') return listo(b);
+      if (a === 'capturar') return capturar(b);
+      if (a === 'revisado') { completar(s, 'Punto ' + s.punto + ' revisado'); return ir(G.i + 1); }
+      if (a === 'csv') return exportar(s.csv);
       if (a === 'atras') return ir(G.i - 1);
       if (a === 'sig') return ir(G.i + 1);
       if (a === 'saltar') { G.est[s.k] = { ...G.est[s.k], s: 'saltado', texto: '' }; return ir(G.i + 1); }
@@ -271,6 +328,7 @@ const Guia = (() => {
       else if (k === 'ip_tx' || k === 'ip_rx') { P[k] = el.value.trim(); delete G.est[actual().k]; guardar(); pintarControles(); }
       else if (k === 'rx_dist_sim') { if (+el.value > 0) P[k] = +el.value; guardar(); pintarControles(); }
       else if (k === 'dists') G.dists = el.value;
+      else if (k === 'obsDist') { if (+el.value > 0 && +el.value !== +G.obsDist) cambiarDistObst(+el.value); }
       else if (+el.value > 0) G[k] = +el.value;
       salvar();
       // se repinta después del clic que pudo provocar este cambio (si no, el botón desaparece bajo el cursor)
@@ -282,7 +340,7 @@ const Guia = (() => {
       if (ocupado || !confirm('¿Empezar una práctica nueva? Los resultados actuales se guardan en una copia dentro de mediciones/.')) return;
       const r = await api.guia_nueva_practica();
       if (!r.ok) return toast(r.error, true);
-      G = NUEVO(); ultimo = null; salvar(); pintar();
+      G = NUEVO(); ultimo = null; captura = null; salvar(); pintar();
       toast(r.copia ? 'Copia guardada: ' + r.copia : 'Práctica nueva');
     };
   }
